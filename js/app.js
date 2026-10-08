@@ -17,7 +17,7 @@ function shell(title, content) {
 }
 function logout() {
   localStorage.removeItem(STORAGE_KEYS.session);
-  location.href = "index.html";
+  location.href = "landing.html";
 }
 function toggleSidebar() {
   qs("#sidebar")?.classList.toggle("open");
@@ -62,7 +62,151 @@ function renderDashboard() {
  <div class="card"><div class="card-head"><h3>Order Status Summary</h3></div><div class="detail-list">${statuses.map((s) => `<div class="detail-row"><span>${s}</span><b>${orders.filter((o) => o.orderStatus === s).length}</b></div>`).join("")}</div></div></div>
  <div class="card" style="margin-top:18px"><div class="card-head"><h3>Status Batch Jastip</h3></div><div class="table-wrap"><table><thead><tr><th>Batch</th><th>Lokasi</th><th>Status</th><th>Quota</th><th>Sisa</th></tr></thead><tbody>${batches.map((b) => `<tr><td>${esc(b.name)}</td><td>${esc(b.location)}</td><td>${badge(b.status)}</td><td>${b.quota}</td><td>${batchRemaining(b)}</td></tr>`).join("")}</tbody></table></div></div>`;
   document.getElementById("app").innerHTML = shell("Dashboard", content);
+  renderTransactionFeeChart(orders);
 }
+
+function renderTransactionFeeChart(orders) {
+  const app = document.getElementById("app");
+  if (!app) return;
+
+  // Grafik ditempatkan di dalam area content agar tidak menimpa sidebar/layout.
+  const container = app.querySelector(".content");
+  if (!container) return;
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.style.marginTop = "18px";
+
+  card.innerHTML = `
+    <div class="card-head">
+      <h3>Grafik Total Transaksi & Estimasi Fee</h3>
+    </div>
+    <div style="padding:18px 12px 24px; overflow-x:auto;">
+      <canvas id="transactionFeeChart" style="display:block; width:100%; max-width:700px; height:350px; margin:auto;"></canvas>
+    </div>
+  `;
+
+  container.appendChild(card);
+
+  const canvas = card.querySelector("#transactionFeeChart");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  const totalTransaction = orders.reduce(
+    (sum, order) => sum + orderTotal(order),
+    0
+  );
+  const totalFee = orders.reduce(
+    (sum, order) => sum + Number(order.fee || 0),
+    0
+  );
+
+  const dpr = window.devicePixelRatio || 1;
+  const cssWidth = Math.min(700, Math.max(320, canvas.parentElement.clientWidth - 24));
+  const cssHeight = 350;
+
+  canvas.width = cssWidth * dpr;
+  canvas.height = cssHeight * dpr;
+  canvas.style.width = cssWidth + "px";
+  canvas.style.height = cssHeight + "px";
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const left = 70;
+  const right = 30;
+  const top = 35;
+  const bottom = 80;
+  const chartWidth = cssWidth - left - right;
+  const chartHeight = cssHeight - top - bottom;
+  const maxValue = Math.max(totalTransaction, totalFee, 1);
+
+  // Grid sederhana
+  ctx.strokeStyle = "#e5e7eb";
+  ctx.lineWidth = 1;
+
+  for (let i = 0; i <= 4; i++) {
+    const y = top + (chartHeight / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(left, y);
+    ctx.lineTo(left + chartWidth, y);
+    ctx.stroke();
+  }
+
+  // Garis dasar
+  ctx.strokeStyle = "#9ca3af";
+  ctx.beginPath();
+  ctx.moveTo(left, top + chartHeight);
+  ctx.lineTo(left + chartWidth, top + chartHeight);
+  ctx.stroke();
+
+  const barWidth = Math.min(150, chartWidth * 0.22);
+  const gap = Math.max(35, chartWidth * 0.10);
+  const groupWidth = barWidth * 2 + gap;
+  const startX = left + (chartWidth - groupWidth) / 2;
+
+  const transactionHeight = (totalTransaction / maxValue) * chartHeight;
+  const feeHeight = (totalFee / maxValue) * chartHeight;
+
+  // Batang transaksi
+  ctx.fillStyle = "#2563eb";
+  ctx.fillRect(
+    startX,
+    top + chartHeight - transactionHeight,
+    barWidth,
+    transactionHeight
+  );
+
+  // Batang fee
+  ctx.fillStyle = "#16a34a";
+  ctx.fillRect(
+    startX + barWidth + gap,
+    top + chartHeight - feeHeight,
+    barWidth,
+    feeHeight
+  );
+
+  // Nilai di atas batang
+  ctx.fillStyle = "#111827";
+  ctx.font = "bold 13px Arial";
+  ctx.textAlign = "center";
+
+  ctx.fillText(
+    money(totalTransaction),
+    startX + barWidth / 2,
+    Math.max(18, top + chartHeight - transactionHeight - 10)
+  );
+
+  ctx.fillText(
+    money(totalFee),
+    startX + barWidth + gap + barWidth / 2,
+    Math.max(18, top + chartHeight - feeHeight - 10)
+  );
+
+  // Label bawah
+  ctx.font = "bold 13px Arial";
+  ctx.fillText(
+    "Total Transaksi",
+    startX + barWidth / 2,
+    top + chartHeight + 35
+  );
+
+  ctx.fillText(
+    "Estimasi Fee",
+    startX + barWidth + gap + barWidth / 2,
+    top + chartHeight + 35
+  );
+
+  // Keterangan singkat
+  ctx.font = "12px Arial";
+  ctx.fillStyle = "#6b7280";
+  ctx.fillText(
+    "Data berdasarkan seluruh order yang tersimpan",
+    cssWidth / 2,
+    cssHeight - 12
+  );
+}
+
 function stat(label, value, icon) {
   return `<div class="card"><span class="stat-icon">${icon}</span><div class="stat-label">${label}</div><div class="stat-value">${value}</div></div>`;
 }
@@ -73,15 +217,37 @@ function renderCustomers() {
     (c.name + c.whatsapp + c.city).toLowerCase().includes(q.toLowerCase()),
   );
   const content = `<div class="page-head"><div><h1>Customer</h1><p>Kelola data pelanggan jastip.</p></div><button class="btn btn-primary" onclick="openCustomerModal()">+ Tambah Customer</button></div>
- <div class="toolbar"><input id="customerSearch" value="${esc(q)}" placeholder="Cari nama, WhatsApp, kota..." oninput="filterCustomer(this.value)"></div>
+ <div class="toolbar"><input id="customerSearch" value="${esc(q)}" placeholder="Cari nama, WhatsApp, kota..."></div>
  <div class="card table-card"><div class="table-wrap"><table><thead><tr><th>Nama</th><th>WhatsApp</th><th>Kota</th><th>Alamat</th><th>Catatan</th><th>Aksi</th></tr></thead><tbody>${rows.length ? rows.map((c) => `<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.whatsapp)}</td><td>${esc(c.city)}</td><td>${esc(c.address)}</td><td>${esc(c.note || "—")}</td><td><button class="btn btn-secondary btn-sm" onclick="openCustomerModal('${c.id}')">Edit</button> <button class="btn btn-danger btn-sm" onclick="deleteCustomer('${c.id}')">Hapus</button></td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">Customer tidak ditemukan.</div></td></tr>`}</tbody></table></div></div>${modalHTML()}`;
   document.getElementById("app").innerHTML = shell("Customer", content);
+  
+  // Add event listener after render
+  const searchInput = document.getElementById("customerSearch");
+  if (searchInput) {
+    let debounceTimer;
+    searchInput.addEventListener("input", function(e) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        filterCustomer(e.target.value);
+      }, 300);
+    });
+  }
 }
 function filterCustomer(q) {
   const url = new URL(location.href);
   q ? url.searchParams.set("q", q) : url.searchParams.delete("q");
   history.replaceState({}, "", url);
-  renderCustomers();
+  
+  // Update table only, not entire page
+  const data = customerData();
+  const rows = data.filter((c) =>
+    (c.name + c.whatsapp + c.city).toLowerCase().includes(q.toLowerCase()),
+  );
+  
+  const tableBody = document.querySelector(".table-card tbody");
+  if (tableBody) {
+    tableBody.innerHTML = rows.length ? rows.map((c) => `<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.whatsapp)}</td><td>${esc(c.city)}</td><td>${esc(c.address)}</td><td>${esc(c.note || "—")}</td><td><button class="btn btn-secondary btn-sm" onclick="openCustomerModal('${c.id}')">Edit</button> <button class="btn btn-danger btn-sm" onclick="deleteCustomer('${c.id}')">Hapus</button></td></tr>`).join("") : `<tr><td colspan="6"><div class="empty">Customer tidak ditemukan.</div></td></tr>`;
+  }
 }
 function modalHTML() {
   return `<div id="modal" class="modal-backdrop"><div class="modal"><div id="modalContent"></div></div></div>`;
@@ -161,15 +327,40 @@ function renderBatches() {
     "Completed",
   ];
   const content = `<div class="page-head"><div><h1>Batch Jastip</h1><p>Kelola perjalanan, quota, dan status batch.</p></div><button class="btn btn-primary" onclick="openBatchModal()">+ Tambah Batch</button></div>
- <div class="toolbar"><input value="${esc(q)}" placeholder="Cari batch/lokasi..." oninput="filterBatch(this.value)"><select onchange="filterBatchStatus(this.value)"><option value="">Semua Status</option>${statuses.map((s) => `<option ${s === status ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+ <div class="toolbar"><input id="batchSearch" value="${esc(q)}" placeholder="Cari batch/lokasi..."><select id="batchStatus" onchange="filterBatchStatus(this.value)"><option value="">Semua Status</option>${statuses.map((s) => `<option ${s === status ? "selected" : ""}>${s}</option>`).join("")}</select></div>
  <div class="card table-card"><div class="table-wrap"><table><thead><tr><th>Batch</th><th>Lokasi</th><th>Deadline</th><th>Status</th><th>Quota</th><th>Terpakai</th><th>Sisa</th><th>Aksi</th></tr></thead><tbody>${rows.length ? rows.map((b) => `<tr><td><b>${esc(b.name)}</b></td><td>${esc(b.location)}</td><td>${dateId(b.deadline)}</td><td>${badge(b.status)}</td><td>${b.quota}</td><td>${batchCount(b.id)}</td><td><b>${batchRemaining(b)}</b></td><td><button class="btn btn-secondary btn-sm" onclick="openBatchModal('${b.id}')">Edit</button> <button class="btn btn-danger btn-sm" onclick="deleteBatch('${b.id}')">Hapus</button></td></tr>`).join("") : `<tr><td colspan="8"><div class="empty">Batch tidak ditemukan.</div></td></tr>`}</tbody></table></div></div>${modalHTML()}`;
   document.getElementById("app").innerHTML = shell("Batch Jastip", content);
+  
+  // Add event listener after render
+  const searchInput = document.getElementById("batchSearch");
+  if (searchInput) {
+    let debounceTimer;
+    searchInput.addEventListener("input", function(e) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        filterBatch(e.target.value);
+      }, 300);
+    });
+  }
 }
 function filterBatch(q) {
   const u = new URL(location.href);
   q ? u.searchParams.set("q", q) : u.searchParams.delete("q");
   history.replaceState({}, "", u);
-  renderBatches();
+  
+  // Update table only, not entire page
+  const data = batchData();
+  const status = getParam("status") || "";
+  const rows = data.filter(
+    (b) =>
+      (b.name + b.location).toLowerCase().includes(q.toLowerCase()) &&
+      (!status || b.status === status),
+  );
+  
+  const tableBody = document.querySelector(".table-card tbody");
+  if (tableBody) {
+    tableBody.innerHTML = rows.length ? rows.map((b) => `<tr><td><b>${esc(b.name)}</b></td><td>${esc(b.location)}</td><td>${dateId(b.deadline)}</td><td>${badge(b.status)}</td><td>${b.quota}</td><td>${batchCount(b.id)}</td><td><b>${batchRemaining(b)}</b></td><td><button class="btn btn-secondary btn-sm" onclick="openBatchModal('${b.id}')">Edit</button> <button class="btn btn-danger btn-sm" onclick="deleteBatch('${b.id}')">Hapus</button></td></tr>`).join("") : `<tr><td colspan="8"><div class="empty">Batch tidak ditemukan.</div></td></tr>`;
+  }
 }
 function filterBatchStatus(s) {
   const u = new URL(location.href);
@@ -268,15 +459,51 @@ function renderOrders() {
     "Dibatalkan",
   ];
   const content = `<div class="page-head"><div><h1>Order Jastip</h1><p>Kelola pesanan, status, dan pembayaran.</p></div><a class="btn btn-primary" href="order-form.html">+ Buat Order</a></div>
- <div class="toolbar"><input value="${esc(q)}" placeholder="Cari nomor/customer/batch..." oninput="filterOrderSearch(this.value)"><select onchange="filterOrderOS(this.value)"><option value="">Semua Order Status</option>${orderStatuses.map((s) => `<option ${s === os ? "selected" : ""}>${s}</option>`).join("")}</select><select onchange="filterOrderPS(this.value)"><option value="">Semua Payment Status</option>${["Belum Bayar", "DP", "Lunas"].map((s) => `<option ${s === ps ? "selected" : ""}>${s}</option>`).join("")}</select></div>
+ <div class="toolbar"><input id="orderSearch" value="${esc(q)}" placeholder="Cari nomor/customer/batch..."><select id="orderStatusFilter" onchange="filterOrderOS(this.value)"><option value="">Semua Order Status</option>${orderStatuses.map((s) => `<option ${s === os ? "selected" : ""}>${s}</option>`).join("")}</select><select id="paymentStatusFilter" onchange="filterOrderPS(this.value)"><option value="">Semua Payment Status</option>${["Belum Bayar", "DP", "Lunas"].map((s) => `<option ${s === ps ? "selected" : ""}>${s}</option>`).join("")}</select></div>
  <div class="card table-card"><div class="table-wrap"><table><thead><tr><th>Nomor</th><th>Customer</th><th>Batch</th><th>Tanggal</th><th>Total</th><th>Payment</th><th>Order Status</th><th>Aksi</th></tr></thead><tbody>${rows.length ? rows.map((o) => `<tr><td><b>${o.id}</b></td><td>${esc(customerName(o.customerId))}</td><td>${esc(batchName(o.batchId))}</td><td>${dateId(o.orderDate)}</td><td>${money(orderTotal(o))}</td><td>${badge(paymentStatus(o))}</td><td>${badge(o.orderStatus)}</td><td><a class="btn btn-secondary btn-sm" href="order-detail.html?id=${o.id}">Detail</a></td></tr>`).join("") : `<tr><td colspan="8"><div class="empty">Order tidak ditemukan.</div></td></tr>`}</tbody></table></div></div>`;
   document.getElementById("app").innerHTML = shell("Order Jastip", content);
+  
+  // Add event listener after render
+  const searchInput = document.getElementById("orderSearch");
+  if (searchInput) {
+    let debounceTimer;
+    searchInput.addEventListener("input", function(e) {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        filterOrderSearch(e.target.value);
+      }, 300);
+    });
+  }
 }
 function setOrderFilter(key, val) {
   const u = new URL(location.href);
   val ? u.searchParams.set(key, val) : u.searchParams.delete(key);
   history.replaceState({}, "", u);
-  renderOrders();
+  
+  // Update table only
+  const orders = orderData(),
+    q = getParam("q") || "",
+    os = getParam("os") || "",
+    ps = getParam("ps") || "";
+  const rows = orders.filter((o) => {
+    const text = (
+      o.id +
+      " " +
+      customerName(o.customerId) +
+      " " +
+      batchName(o.batchId)
+    ).toLowerCase();
+    return (
+      text.includes(q.toLowerCase()) &&
+      (!os || o.orderStatus === os) &&
+      (!ps || paymentStatus(o) === ps)
+    );
+  });
+  
+  const tableBody = document.querySelector(".table-card tbody");
+  if (tableBody) {
+    tableBody.innerHTML = rows.length ? rows.map((o) => `<tr><td><b>${o.id}</b></td><td>${esc(customerName(o.customerId))}</td><td>${esc(batchName(o.batchId))}</td><td>${dateId(o.orderDate)}</td><td>${money(orderTotal(o))}</td><td>${badge(paymentStatus(o))}</td><td>${badge(o.orderStatus)}</td><td><a class="btn btn-secondary btn-sm" href="order-detail.html?id=${o.id}">Detail</a></td></tr>`).join("") : `<tr><td colspan="8"><div class="empty">Order tidak ditemukan.</div></td></tr>`;
+  }
 }
 const filterOrderSearch = (q) => setOrderFilter("q", q),
   filterOrderOS = (s) => setOrderFilter("os", s),
@@ -296,7 +523,7 @@ function renderOrderForm() {
     paidAmount: 0,
     note: "",
   };
-  const content = `<div class="page-head"><div><h1>${id ? "Edit" : "Buat"} Order</h1><p>Order hanya dapat dibuat pada batch Open dan quota masih tersedia.</p></div><a class="btn btn-secondary" href="order.html">Kembali</a></div>
+  const content = `<div class="page-head"><div><h1>${id ? "Edit" : "Buat"} Order</h1><p>Order hanya dapat dibuat pada batch Open dan quota masih tersedia.</p></div></div>
  <form id="orderForm" class="card form-card" onsubmit="saveOrder(event,'${id || ""}')">
  <div class="form-grid"><label>Customer<select name="customerId" required><option value="">Pilih customer</option>${customers.map((c) => `<option value="${c.id}" ${c.id === o.customerId ? "selected" : ""}>${esc(c.name)} — ${esc(c.whatsapp)}</option>`).join("")}</select></label>
  <label>Batch Jastip<select name="batchId" required><option value="">Pilih batch</option>${batches
@@ -311,7 +538,7 @@ function renderOrderForm() {
  <button type="button" class="btn btn-secondary btn-sm" onclick="addItem()">+ Tambah Item</button>
  <div class="section-title">Biaya & Pembayaran</div><div class="form-grid"><label>Fee Jastip (Rp)<input id="fee" type="number" min="0" value="${o.fee}" oninput="updateCalc()"></label><label>Ongkir (Rp)<input id="shipping" type="number" min="0" value="${o.shippingCost}" oninput="updateCalc()"></label><label>Paid Amount / Pembayaran Saat Ini (Rp)<input id="paid" type="number" min="0" value="${id ? 0 : o.paidAmount}" ${id ? "" : "required"}><small class="muted">${id ? "Untuk edit, gunakan tombol Catat Pembayaran di halaman detail." : ""}</small></label></div>
  <div class="summary" style="margin-top:15px"><div class="summary-line"><span>Subtotal</span><b id="subtotal">Rp0</b></div><div class="summary-line"><span>Fee</span><b id="feeShow">Rp0</b></div><div class="summary-line"><span>Ongkir</span><b id="shipShow">Rp0</b></div><div class="summary-line total"><span>Total</span><b id="total">Rp0</b></div></div>
- <br><button class="btn btn-primary">Simpan Order</button></form>`;
+ <br><div class="actions"><a href="order.html" class="btn btn-secondary">Kembali</a><button class="btn btn-primary">Simpan Order</button></div></form>`;
   document.getElementById("app").innerHTML = shell("Form Order", content);
   updateCalc();
 }
