@@ -101,7 +101,7 @@ function navTo(url) {
 function saveAndNotify(key, data, msg) {
   Store.set(key, data);
   toast(msg);
-  setTimeout(() => location.reload(), 300);
+  Promise.resolve(window.flushCloudWrites ? window.flushCloudWrites() : null).finally(() => setTimeout(() => location.reload(), 300));
 }
 function orderNumber() {
   const d = new Date();
