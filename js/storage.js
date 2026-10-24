@@ -12,7 +12,7 @@ const Store = {
   },
   set(key, value) {
     localStorage.setItem(key, JSON.stringify(value));
-    if (window.currentAuthUser && window.cloudDataReady && typeof window.persistUserData === "function") {
+    if (window.currentAuthUser && window.cloudDataReady && typeof window.queueUserDataWrite === "function") {
       window.queueUserDataWrite(key, value);
     }
   },
