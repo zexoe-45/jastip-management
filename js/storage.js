@@ -7,22 +7,13 @@ const STORAGE_KEYS = {
 };
 const Store = {
   get(key, fallback = []) {
-    try {
-      return JSON.parse(localStorage.getItem(key)) ?? fallback;
-    } catch {
-      return fallback;
-    }
+    try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+    catch { return fallback; }
   },
-  set(key, value) {
-    localStorage.setItem(key, JSON.stringify(value));
-  },
-  remove(key) {
-    localStorage.removeItem(key);
-  },
-  clearApp() {
-    Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));
-  },
+  set(key, value) { localStorage.setItem(key, JSON.stringify(value)); },
+  remove(key) { localStorage.removeItem(key); },
+  clearApp() { Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key)); },
 };
 function isLoggedIn() {
-  return localStorage.getItem(STORAGE_KEYS.session) === "admin";
+  return Boolean(localStorage.getItem(STORAGE_KEYS.session));
 }
