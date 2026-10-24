@@ -69,7 +69,8 @@ function shell(title, content) {
  <div class="sidebar-footer"><button class="btn btn-secondary btn-block" onclick="logout()">Keluar</button></div>
  </aside><div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div><main class="main"><header class="topbar"><button class="mobile-menu" onclick="toggleSidebar()">☰</button><h2>${title}</h2><div class="topbar-right"><button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="${themeLabel}" aria-label="${themeLabel}">${themeIcon}</button><div class="user-box">Admin · Demo</div></div></header><section class="content">${content}</section></main></div>`;
 }
-function logout() {
+async function logout() {
+  try { await supabaseClient.auth.signOut(); } catch (error) { console.error("Sign out failed", error); }
   localStorage.removeItem(STORAGE_KEYS.session);
   location.href = "landing.html";
 }
