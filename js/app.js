@@ -2215,7 +2215,7 @@ function resetDemo() {
   seedDemoData(true);
   localStorage.setItem(STORAGE_KEYS.session, "admin");
   toast("Demo data berhasil direset");
-  setTimeout(() => (location.href = "dashboard.html"), 500);
+  Promise.resolve(window.flushCloudWrites ? window.flushCloudWrites() : null).finally(() => setTimeout(() => (location.href = "dashboard.html"), 300));
 }
 async function bootApp() {
   try {
