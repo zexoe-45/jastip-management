@@ -1,4 +1,3 @@
-if (!requireLogin()) throw new Error("not logged");
 const page = document.body.dataset.page;
 const customerData = () => Store.get(STORAGE_KEYS.customers, []);
 const batchData = () => Store.get(STORAGE_KEYS.batches, []);
@@ -67,7 +66,7 @@ function shell(title, content) {
  <a class="nav-link ${["order", "order-form", "order-detail"].includes(page) ? "active" : ""}" href="order.html" onclick="closeSidebar()">☷ <span>Order</span></a>
  <div class="nav-title">Sistem</div><a class="nav-link ${page === "settings" ? "active" : ""}" href="settings.html" onclick="closeSidebar()">⚙ <span>Pengaturan</span></a>
  <div class="sidebar-footer"><button class="btn btn-secondary btn-block" onclick="logout()">Keluar</button></div>
- </aside><div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div><main class="main"><header class="topbar"><button class="mobile-menu" onclick="toggleSidebar()">☰</button><h2>${title}</h2><div class="topbar-right"><button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="${themeLabel}" aria-label="${themeLabel}">${themeIcon}</button><div class="user-box">Admin · Demo</div></div></header><section class="content">${content}</section></main></div>`;
+ </aside><div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div><main class="main"><header class="topbar"><button class="mobile-menu" onclick="toggleSidebar()">☰</button><h2>${title}</h2><div class="topbar-right"><button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="${themeLabel}" aria-label="${themeLabel}">${themeIcon}</button><div class="user-box">${esc(window.currentAuthUser?.email || "Pengguna")}</div></div></header><section class="content">${content}</section></main></div>`;
 }
 async function logout() {
   try { await supabaseClient.auth.signOut(); } catch (error) { console.error("Sign out failed", error); }
@@ -2218,4 +2217,22 @@ function resetDemo() {
   toast("Demo data berhasil direset");
   setTimeout(() => (location.href = "dashboard.html"), 500);
 }
-init();
+async function bootApp() {
+  try {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error || !data.session) {
+      localStorage.removeItem(STORAGE_KEYS.session);
+      location.replace("index.html");
+      return;
+    }
+    window.currentAuthUser = data.session.user;
+    localStorage.setItem(STORAGE_KEYS.session, data.session.user.id);
+    await window.hydrateUserData(data.session.user);
+    init();
+  } catch (error) {
+    console.error("App initialization failed:", error);
+    const root = document.getElementById("app");
+    if (root) root.innerHTML = '<div class="card" style="margin:24px;padding:24px"><h2>Tidak dapat memuat data</h2><p>Periksa koneksi internet dan konfigurasi Supabase, lalu muat ulang halaman.</p></div>';
+  }
+}
+bootApp();
