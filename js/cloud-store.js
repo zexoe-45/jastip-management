@@ -13,6 +13,18 @@ window.hydrateUserData = async function(user) {
   if (error) throw error;
   const remote = Object.fromEntries((data || []).map((row) => [row.data_key, row.data]));
   const defaults = { customers: [], batches: [], orders: [], settings: {} };
+  // Keep a local-only backup when this account has no cloud data yet.
+  // Demo/local data is not silently uploaded into a user's account.
+  if ((data || []).length === 0) {
+    const backupKey = "jastip_local_backup_" + user.id;
+    if (!localStorage.getItem(backupKey)) {
+      const snapshot = {};
+      for (const [storageKey, dataKey] of Object.entries(CLOUD_KEY_BY_STORAGE)) {
+        snapshot[dataKey] = JSON.parse(localStorage.getItem(storageKey) || (dataKey === "settings" ? "{}" : "[]"));
+      }
+      localStorage.setItem(backupKey, JSON.stringify(snapshot));
+    }
+  }
   for (const [storageKey, dataKey] of Object.entries(CLOUD_KEY_BY_STORAGE)) {
     const value = Object.prototype.hasOwnProperty.call(remote, dataKey) ? remote[dataKey] : defaults[dataKey];
     localStorage.setItem(storageKey, JSON.stringify(value));
