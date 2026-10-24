@@ -10,9 +10,14 @@ const Store = {
     try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
     catch { return fallback; }
   },
-  set(key, value) { localStorage.setItem(key, JSON.stringify(value)); },
+  set(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+    if (window.currentAuthUser && window.cloudDataReady && typeof window.persistUserData === "function") {
+      window.queueUserDataWrite(key, value);
+    }
+  },
   remove(key) { localStorage.removeItem(key); },
-  clearApp() { Object.values(STORAGE_KEYS).forEach((key) => localStorage.removeItem(key)); },
+  clearApp() { Object.values(STORAGE_KEYS).filter((key) => key !== STORAGE_KEYS.session).forEach((key) => localStorage.removeItem(key)); },
 };
 function isLoggedIn() {
   return Boolean(localStorage.getItem(STORAGE_KEYS.session));
