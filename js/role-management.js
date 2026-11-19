@@ -8,6 +8,7 @@
     const content = document.querySelector("#app .content");
     if (!content) return false;
     document.querySelector(".topbar h2")?.replaceChildren(document.createTextNode("Atur Role"));
+    [...document.querySelectorAll('.sidebar a')].find(link => link.getAttribute('href') === 'settings.html')?.classList.remove('active');
     content.innerHTML = `
       <div class="page-head">
         <div><h1>Atur Role Pengguna</h1><p>Kelola hak akses akun yang terdaftar pada Jastip Zhar.</p></div>
